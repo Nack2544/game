@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Celestial Odyssey - Level 1</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #gameOverMessage {
+            display: none;
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 48px;
+            font-family: Arial, sans-serif;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        #restartButton {
+            display: none;
+            position: absolute;
+            top: 60%;
+            transform: translateY(-50%);
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+            color: #000000;
+            background-color: #ffffff;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+    </style>
+
+</head>
+
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameOverMessage">Game Over</div>
+    <button id="restartButton">Restart</button>
+    <!-- This imports the amplifyAPI.js Make sure the file path is correct -->
+   <script type="module">
+    
+
+const backgroundTile = new Image();
+backgroundTile.src = 'v7.jpg';
+const backgroundStart = new Image();
+
+let imagesLoaded = 0;
+let score = 0;
+let isJumping = false;
+
+const GRAVITY = 0.6;
+
+
+
+const astraiaSprite = {
+    image: new Image(),
+    frameWidth: 80, // Width of an individual frame
+    frameHeight: 100, // Height of an individual frame
+    runFrames: 6, // Number of frames in the run animation
+    
+    currentFrame: 0, // Current frame being displayed
+    lastFrameUpdate: 0, // Time since the last frame update
+    
+};
+astraiaSprite.image.src = 'astraia_sprite.png';
+
+
+
+
+
+function onImageLoad() {
+    imagesLoaded++;
+    if (imagesLoaded === 2) { // All images have loaded
+        gameLoop(); // Start the game loop
+    }
+}
+
+backgroundTile.onload = onImageLoad;
+backgroundStart.onload = onImageLoad;
+
+
+
+backgroundStart.src = 'v7.jpg';
+const backgroundScrollSpeed = 0.2; 
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const gameOverMessage = document.getElementById('gameOverMessage');
+const restartButton = document.getElementById('restartButton');
+const camera = {
+    x: 0,
+    y: 0,
+};
+
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const platformTexture = new Image();
+platformTexture.src = 'platformtexturev1.jpg';
+
+
+
+
+function drawBackground() {
+    const tileWidth = backgroundTile.width;
+    const tileHeight = backgroundTile.height;
+    const numTilesX = Math.ceil(canvas.width / tileWidth) + 2;
+    const numTilesY = Math.ceil(canvas.height / tileHeight);
+
+    const offsetX = camera.x * backgroundScrollSpeed % tileWidth + tileWidth;
+
+    for (let i = 0; i < numTilesX; i++) {
+        for (let j = 0; j < numTilesY; j++) {
+            ctx.drawImage(
+                backgroundTile,
+                i * tileWidth - offsetX,
+                j * tileHeight,
+                tileWidth,
+                tileHeight
+            );
+        }
+    }
+}
+
+
+class Character {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.velocityY = 0;
+        this.velocityX = 0;
+        this.speed = 7;
+        this.acceleration = 0.1;
+        this.friction = 0.2;
+        this.isJumping = false;
+        this.jumpCount = 0;
+        this.hearts = 3;
+        this.isAlive = true;
+        this.isMoving = false;
+        this.frameIndex = 0;
+        this.tickCount = 0;
+        this.ticksPerFrame = 5;
+        this.numberOfFrames = 6;
+    }
+
+    jump() {
+        if (this.jumpCount < 3) {
+            this.isJumping = true;
+            this.velocityY = -15;
+            this.jumpCount++;
+        }
+    }
+
+    update() {
+        // Apply gravity to the character's vertical velocity (y-axis)
+        this.velocityY += GRAVITY;
+
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+        this.isMovingHorizontally = this.velocityX !== 0;
+
+        if (this.isMovingHorizontally) {
+            this.tickCount++;
+            if (this.tickCount > this.ticksPerFrame) {
+                this.tickCount = 0;
+                this.frameIndex = (this.frameIndex + 1) % this.numberOfFrames;
+            }
+        } else {
+            this.frameIndex = 0;
+        }
+    }
+
+
+    draw() {
+        const sourceX = this.frameIndex * astraiaSprite.frameWidth;
+        const sourceY = 0; // You can adjust this value if your sprite sheet has multiple rows
+
+        // Log the sourceX and sourceY values
+        console.log("sourceX:", sourceX);
+        console.log("sourceY:", sourceY);
+
+        ctx.drawImage(
+            astraiaSprite.image,
+            this.frameIndex * astraiaSprite.frameWidth,
+            0,
+            astraiaSprite.frameWidth,
+            astraiaSprite.frameHeight,
+            this.x - camera.x,
+            this.y - (astraiaSprite.frameHeight - this.height),
+            astraiaSprite.frameWidth,
+            astraiaSprite.frameHeight
+        );
+    }
+} 
+
+
+class Platform {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+
+    draw() {
+    // Draw the platform texture
+    ctx.drawImage(platformTexture, this.x - camera.x, this.y - camera.y, this.width, this.height);
+
+    // Add an outline to the platform
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2; // Set the outline width
+    ctx.strokeRect(this.x - camera.x, this.y - camera.y, this.width, this.height);
+}
+
+}
+
+function updateScore() {
+    if (character.velocityX > 0) {
+        score += 2 * character.velocityX;
+    }
+}
+
+function drawScore() {
+    ctx.font = '30px Arial';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('Distance: ' + Math.floor(score), 10, 50);
+}
+
+
+function getRandomPlatformHeight() {
+    const randomHeightIndex = Math.floor(Math.random() * 3);
+    const screenHeight = canvas.height;
+    const platformHeight = 20; // The height of the platform
+    const characterHeight = 50; // The height of the character
+    const platformHeights = [
+        screenHeight - characterHeight - platformHeight - 100,
+        screenHeight / 3 - platformHeight,
+        (screenHeight * 2) / 3 - platformHeight
+    ];
+
+    return platformHeights[randomHeightIndex];
+}
+
+
+
+// Generate random platforms
+function generatePlatform(previousX, previousY, elapsedTime) {
+    const minWidth = 700; // Minimum width of the platforms
+    const maxWidth = 800; // Maximum width of the platforms
+    const width = minWidth + Math.random() * (maxWidth - minWidth);
+
+    const maxJumpDistance = 250; // Set this to your character's maximum jump distance
+    const minGapX = 100; // Minimum horizontal distance between platforms
+    const maxGapX = maxJumpDistance; // Maximum horizontal distance between platforms
+
+    // Calculate time factor based on elapsed time
+    const timeFactor = Math.min(1, elapsedTime / 120000); // 120000 ms = 12 seconds
+
+    // Increase the gap on the x-axis based on the time factor
+    const adjustedMinGapX = minGapX + timeFactor * (maxJumpDistance - minGapX);
+    const adjustedMaxGapX = maxGapX + timeFactor * (maxJumpDistance - maxGapX);
+    const gapX = adjustedMinGapX + Math.random() * (adjustedMaxGapX - adjustedMinGapX);
+
+    let x = previousX + width + gapX;
+    let y = getRandomPlatformHeight(); // Set the height using the new function
+
+    return new Platform(x, y, width, 20);
+}
+
+
+
+function generatePlatforms() {
+    let platforms = [new Platform(200, canvas.height / 2, 100, 20)];
+
+    // Generate platforms as the character moves
+    const checkAndGeneratePlatforms = (elapsedTime) => {
+    const lastPlatform = platforms[platforms.length - 1];
+
+    if (character.x >= lastPlatform.x - canvas.width) {
+        platforms.push(generatePlatform(lastPlatform.x, lastPlatform.y, elapsedTime));
+    }
+};
+
+    return {
+        platforms,
+        update: checkAndGeneratePlatforms,
+    };
+}
+
+const platformManager = generatePlatforms();
+const platforms = platformManager.platforms;
+const character = new Character(platforms[0].x, platforms[0].y - 50, 50, 50);
+
+let startTime = performance.now();
+
+
+
+
+
+function checkCollision(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.width &&
+           rect1.x + rect1.width > rect2.x &&
+           rect1.y < rect2.y + rect2.height &&
+           rect1.y + rect1.height > rect2.y;
+}
+
+
+function handlePlatformCollision() {
+    platforms.forEach(platform => {
+        if (checkCollision(character, platform)) {
+            if (character.velocityY > 0) {
+                character.y = platform.y - character.height; // Add an offset (e.g., 5) to the character's height
+                character.velocityY = 0;
+                character.isJumping = false;
+                character.jumpCount = 0; // Reset jump count when the character touches a platform
+            } else if (character.velocityY < 0) {
+                character.y = platform.y + platform.height;
+                character.velocityY = 0;
+            }
+        }
+    });
+}
+
+
+let gameOver = false;
+
+function checkGameOver() {
+    if (character.y >= canvas.height - character.height) {
+        character.isAlive = false;
+        showGameOver();
+    }
+}
+
+
+        // Show the game over message and restart button
+        function showGameOver() {
+            gameOver = true;
+            character.isAlive = false;
+            gameOverMessage.style.display = 'block';
+            restartButton.style.display = 'block';
+            restartButton.addEventListener('click', restartGame);
+            submitScore(score);
+}
+
+        // Reset the game state and hide the game over message and restart button
+        function restartGame() {
+            gameOverMessage.style.display = 'none';
+            restartButton.style.display = 'none';
+            gameOver = false;
+
+            // Reset platforms to their initial positions
+            platforms.length = 1;
+            platforms[0].x = 200;
+            platforms[0].y = canvas.height / 2;
+
+            character.isAlive = true;
+            character.velocityX = 0;
+
+            score = 0;
+
+            // Update character's position after resetting the platform's position
+            character.x = platforms[0].x;
+            character.y = platforms[0].y - 50;
+            character.velocityY = 0;
+            character.jumpCount = 0;
+
+            startTime = performance.now();
+}
+
+
+function updateCamera() {
+    const cameraOffset = 300;
+    const cameraSpeed = 0.95; // Add a camera speed (between 0 and 1, where 1 is the fastest)
+
+    // Calculate the desired camera position based on the character's position and cameraOffset
+    const targetCameraX = character.x - cameraOffset;
+
+    // Interpolate the camera position using cameraSpeed for smoother movement
+    const deltaX = targetCameraX - camera.x;
+    const smoothDeltaX = deltaX * cameraSpeed;
+    camera.x += smoothDeltaX;
+}
+
+
+
+
+function drawHeart(x, y, width, height) {
+  ctx.beginPath();
+
+  // Calculate the coordinates for the triangles and semicircles
+  const triangleWidth = width * 0.5;
+  const triangleHeight = height * 0.6;
+  const circleRadius = triangleWidth / 2;
+
+  // Draw the triangle
+  ctx.moveTo(x, y + triangleHeight);
+  ctx.lineTo(x + triangleWidth, y + height);
+  ctx.lineTo(x + width, y + triangleHeight);
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw the left semicircle
+  ctx.beginPath();
+  ctx.arc(x + triangleWidth / 2, y + triangleHeight, circleRadius, Math.PI, 0, false);
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw the right semicircle
+  ctx.beginPath();
+  ctx.arc(x + triangleWidth * 1.5, y + triangleHeight, circleRadius, Math.PI, 0, false);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawHearts() {
+    const heartSize = 30;
+    const heartSpacing = 5;
+    const totalHeartWidth = character.hearts * (heartSize + heartSpacing) - heartSpacing;
+    const startingX = (canvas.width - totalHeartWidth) / 2;
+
+    ctx.fillStyle = 'red';
+    for (let i = 0; i < character.hearts; i++) {
+        drawHeart(startingX + i * (heartSize + heartSpacing), 10, heartSize, heartSize);
+    }
+}
+
+
+
+function gameLoop() {
+    try {
+        if (!gameOver) {
+        // Calculate elapsed time
+        let currentTime = performance.now();
+        let elapsedTime = currentTime - startTime;
+
+        // Update the game state
+        platformManager.update(elapsedTime);
+        character.update();
+        updateCamera();
+        handlePlatformCollision();
+        updateScore();
+        checkGameOver();
+
+        drawBackground();
+        platforms.forEach(platform => platform.draw());
+        character.draw();
+        drawScore();
+        drawHearts();
+    }
+
+        // Call the game loop again on the next frame
+        requestAnimationFrame(gameLoop);
+    } catch (error) {
+        console.error('An error occurred in the game loop:', error);
+    }
+}
+
+
+
+document.addEventListener('keydown', (e) => {
+    if (!gameOver) {
+        if (e.code === 'Space') {
+            character.jump();
+        } else if (e.code === 'ArrowLeft') {
+            character.velocityX = -character.speed;
+        } else if (e.code === 'ArrowRight') {
+            character.velocityX = character.speed;
+        }
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (!gameOver) {
+        if (e.code === 'ArrowLeft' && character.velocityX < 0) {
+            character.velocityX = 0;
+        } else if (e.code === 'ArrowRight' && character.velocityX > 0) {
+            character.velocityX = 0;
+        }
+    }
+});
+
+
+document.addEventListener('keydown', function(event) {
+    if (event.code === 'Space' && !isJumping && !jumpCooldown) {
+        isJumping = true;
+        setTimeout(() => {
+            isJumping = false;
+        }, 500); // Duration of the jump
+
+        setTimeout(() => {
+            jumpCooldown = false;
+        }, 100); // Cooldown period before allowing another jump
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') {
+        character.isJumping = false;
+    } 
+});
+
+
+    </script>
+</body>
+</html>
